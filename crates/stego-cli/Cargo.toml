@@ -1,0 +1,18 @@
+[package]
+name = "stego-cli"
+description = "Native CLI over stego-core: create/extract signatures, test vectors, debugging"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "stego"
+path = "src/main.rs"
+
+[dependencies]
+stego-core.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+getrandom = "0.2"
+base64 = "0.22"
+anyhow = "1"

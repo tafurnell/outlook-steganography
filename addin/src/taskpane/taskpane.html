@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure Signature</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+<body>
+  <header>
+    <h1>Secure Signature</h1>
+    <button id="settingsToggle" class="link" type="button">Settings</button>
+  </header>
+
+  <main>
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <!-- Settings: shared passphrase (D-012) + display name -->
+    <section id="settingsView" hidden>
+      <h2>Settings</h2>
+      <p class="hint">Everyone who exchanges hidden codes must use the <strong>same passphrase</strong>. Only a derived key is stored, never the passphrase.</p>
+      <p id="keyInfo" class="hint"></p>
+      <label for="passphrase">Shared passphrase</label>
+      <input id="passphrase" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. five random words" />
+      <label for="displayName">Name shown in signature</label>
+      <input id="displayName" type="text" autocomplete="name" />
+      <div class="row">
+        <button id="saveSettings" type="button" class="primary">Save</button>
+        <button id="forgetKey" type="button">Remove key</button>
+      </div>
+    </section>
+
+    <!-- Compose: add signature with hidden secret -->
+    <section id="composeView" hidden>
+      <h2>Add secure signature</h2>
+      <label for="sigName">Name</label>
+      <input id="sigName" type="text" />
+      <label for="secret">Secret to hide <span id="counter" class="hint"></span></label>
+      <input id="secret" type="password" autocomplete="off" spellcheck="false" />
+      <label class="inline"><input id="showSecretInput" type="checkbox" /> Show while typing</label>
+      <button id="insertSig" type="button" class="primary">Insert signature</button>
+      <p class="hint">Previous secure signatures in this draft (e.g. from a reply) are removed first.</p>
+    </section>
+
+    <!-- Read: results -->
+    <section id="readView" hidden>
+      <h2>This message</h2>
+      <div id="results"></div>
+      <button id="recheck" type="button">Check again</button>
+      <p class="hint">Tip: pin this pane to check every message you open.</p>
+    </section>
+  </main>
+
+  <template id="secretCard">
+    <div class="card">
+      <div class="card-title">Embedded secret found <span class="src hint"></span></div>
+      <code class="secret masked">••••••••</code>
+      <div class="row">
+        <button type="button" class="show primary">Show secret</button>
+        <button type="button" class="copy">Copy</button>
+      </div>
+    </div>
+  </template>
+</body>
+</html>

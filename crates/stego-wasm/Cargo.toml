@@ -1,0 +1,15 @@
+[package]
+name = "stego-wasm"
+description = "wasm-bindgen bindings for stego-core, consumed by the Outlook add-in"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+stego-core.workspace = true
+wasm-bindgen = "0.2"
+base64 = "0.22"

@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/stego-core", "crates/stego-cli", "crates/stego-wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+stego-core = { path = "crates/stego-core" }
+
+[profile.release]
+opt-level = "z"     # small WASM bundle (mobile-readiness, D-018)
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -1,0 +1,21 @@
+[package]
+name = "stego-core"
+description = "Transport-agnostic core: signature rendering, payload format, encryption and LSB steganography"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+hkdf = "0.12"
+sha2 = "0.10"
+png = "0.17"
+ab_glyph = "0.2"
+rand_chacha = "0.3"
+rand_core = "0.6"
+thiserror = "2"
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
