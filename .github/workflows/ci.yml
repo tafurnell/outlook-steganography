@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2   # caches target/, registry and ~/.cargo/bin
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Install wasm-bindgen-cli (version from Cargo.lock)
+        run: |
+          V=$(grep -A1 'name = "wasm-bindgen"$' Cargo.lock | grep version | cut -d'"' -f2)
+          if ! wasm-bindgen --version 2>/dev/null | grep -q "$V"; then
+            cargo install wasm-bindgen-cli --version "$V" --locked
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: addin/package-lock.json
+
+      - name: Install wasm-opt
+        run: npm i -g binaryen
+
+      - name: npm ci
+        working-directory: addin
+        run: npm ci
+
+      - name: Build (WASM + add-in, production URLs)
+        working-directory: addin
+        run: npm run build
+
+      - name: Typecheck
+        working-directory: addin
+        run: npm run typecheck
+
+      - name: Tests
+        working-directory: addin
+        run: npm test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: addin-dist
+          path: addin/dist

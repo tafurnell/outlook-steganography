@@ -189,6 +189,8 @@ Mobile is out of scope for phase 1 but **must not be blocked**. On mobile, sendi
 | D-034 | 2026-11-11 | Deployment tooling: `npm run deploy` (scp + Cloudflare purge) and **`npm run verify`** (`scripts/verify-deploy.mjs`: status, MIME types, no frame-blocking headers, cache headers, Cloudflare challenges, manifest base URL, WASM validity) | Accepted | The nginx snippet was tested on nginx 1.24: the hashed-file regex **must be quoted** (it contains `{8}`; unquoted, `nginx -t` fails) – fixed. Verified: correct MIME/caching per file type, nginx 404 (not WordPress) for missing files, server-level `X-Frame-Options` dropped inside the location. |
 | D-035 | 2026-11-11 | Signature text is free-form (e.g. "Regards", "Tim"); the renderer enforces a **minimum canvas width of 400 px** (200 px displayed), padding short text with white space on the right | Accepted | The payload is fixed-size, so any text fits, but short text means a larger share of altered pixels (e.g. "T" ≈ 10 %, "Tim" ≈ 7 %) – easier to detect statistically. With the minimum width, short text stays under 3 %, comparable to a full name. Older images still decode. |
 | D-036 | 2026-11-11 | **Neutral attachment name** `image0NN.png` (Outlook's own style, random NN) instead of `sig_<name>.png`; reply-stripping now **always decodes** before removing (never trusts names) | Accepted | Varying signatures should give no hint of an embedded message; a recognisable `sig_` prefix did, in clients that keep names. Supersedes the filename hint in D-006 (legacy `sig_` names are still recognised when reading). |
+| D-037 | 2026-11-11 | **Font trimmed to Latin** (Basic Latin, Latin-1, Latin Extended-A, typographic punctuation, €, ™; `kern` only, no hinting) via `scripts/subset-font.py`; the renderer rejects characters the font lacks with a clear error | Accepted | 241 → 52 KiB font, WASM 588 → 400 KiB. Rendering verified pixel-identical before/after (incl. accented names). Only the visible signature text is affected – secrets are never drawn (test: `Pässwörd-Ωμέγα-密码-🔑` round-trips). OFL 1.1, no Reserved Font Name, OFL.txt shipped. |
+| D-038 | 2026-11-11 | **Argon2id in a Web Worker** (`kdf.worker.ts`, main-thread fallback) – pane stays responsive while saving the passphrase. **Automated tests**: 19 Rust + 15 Vitest (MIME parser, draft HTML editing in `bodyEdit.ts`, WASM round trip incl. fixed test-vector key). **GitHub Actions CI** (`.github/workflows/ci.yml`): cargo test + clippy `-D warnings`, WASM + add-in build, typecheck, tests, `dist` artifact | Accepted | Verified in headless Chrome: worker key = native CLI key, ~0.35 s, UI timer kept running. |
 
 ## 8. Open questions
 
@@ -213,9 +215,7 @@ _No open questions at present._ (~~Q-15 web server~~ → D-019)
 3. Hosting check on the Pi – S-5.
 
 **Follow-ups / tech debt**
-- Subset the Allura font to Latin glyphs to cut ~150–200 KiB from the WASM.
-- Run Argon2id in a Web Worker so the UI doesn't freeze during key derivation.
-- TypeScript unit tests (adapter mocked) and an automated round-trip test in CI.
+- ~~Subset the font~~ (D-037) · ~~Argon2id in a Web Worker~~ (D-038) · ~~TypeScript tests + CI~~ (D-038)
 - Body-order detection of "newest" signature in long threads (currently attachment order, hinted names first).
 
 ### Test results – S-1 / S-2, new Outlook for Windows, Outlook.com accounts (2026-11-10)

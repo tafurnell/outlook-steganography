@@ -6,6 +6,8 @@ use crate::pngio::RgbImage;
 use crate::{Error, Result};
 
 /// Allura, SIL Open Font License 1.1 (see assets/fonts/OFL.txt). D-013.
+/// Trimmed to Latin by scripts/subset-font.py (D-037) – affects only the visible
+/// signature text, never the secret.
 pub static ALLURA: &[u8] = include_bytes!("../assets/fonts/Allura-Regular.ttf");
 
 #[derive(Clone, Debug)]
@@ -47,6 +49,9 @@ pub fn render_signature(name: &str, opt: &RenderOptions) -> Result<RgbImage> {
     let mut prev = None;
     for ch in name.chars() {
         let id = scaled.glyph_id(ch);
+        if id.0 == 0 && !ch.is_whitespace() {
+            return Err(Error::UnsupportedCharacter(ch));
+        }
         if let Some(p) = prev {
             caret += scaled.kern(p, id);
         }
@@ -112,6 +117,22 @@ mod tests {
         // Embedding density stays low: fixed payload bits vs channel slots.
         let bits = crate::PAYLOAD_LEN * 8 * crate::format::REDUNDANCY;
         assert!((bits as f64) / (img.data.len() as f64) < 0.03, "{}", img.data.len());
+    }
+
+    #[test]
+    fn latin_supported_others_rejected() {
+        let o = RenderOptions::default();
+        assert!(render_signature("Zoë Ångström-Łódź, “Regards” – €5", &o).is_ok());
+        assert_eq!(render_signature("Tim 😀", &o).unwrap_err(), Error::UnsupportedCharacter('😀'));
+        assert_eq!(render_signature("Ωmega", &o).unwrap_err(), Error::UnsupportedCharacter('Ω'));
+    }
+
+    #[test]
+    fn secret_may_use_any_characters() {
+        // The secret is never rendered, so it is not limited by the font.
+        let k = crate::derive_master_key_with_params("pw", &crate::KdfParams::insecure_fast_for_tests()).unwrap();
+        let png = crate::create_signature(&k, "Regards", "Pässwörd-Ωμέγα-密码-🔑", 1, [0; 12], &RenderOptions::default()).unwrap();
+        assert_eq!(crate::extract_message(&k, &png).unwrap().unwrap().message, "Pässwörd-Ωμέγα-密码-🔑");
     }
 
     #[test]

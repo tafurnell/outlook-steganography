@@ -1,15 +1,13 @@
 import type { SignatureImage } from "../core/stego";
 import { isSignatureFileName } from "../core/stego";
 import { extractPngParts } from "./mime";
+import { findQuoteStart, selectOldSignatureImgs, signatureImgHtml } from "./bodyEdit";
 import type {
   AttachmentNote, CandidateImage, ItemMode, MailAdapter, RemovalReport, ScanResult, SettingsStore,
 } from "./MailAdapter";
 
 const NOTICE_KEY = "ostgNotice";
 const MAX_SCAN_BYTES = 5 * 1024 * 1024; // don't pull huge attachments
-const SIG_CLASS = "ostg-sig";
-// Outlook prefixes class names in received/quoted HTML (e.g. "x_ostg-sig").
-const SIG_CLASS_RE = /(^|[\s_])ostg-sig(\s|$)/;
 const CACHE_PREFIX = "ostg.cache.";
 
 function call<T>(fn: (cb: (r: Office.AsyncResult<T>) => void) => void): Promise<T> {
@@ -53,33 +51,7 @@ function looksLikePng(a: { name: string; contentType?: string }): boolean {
  * compose pane), so values are also cached in this origin's localStorage and
  * used only when roamingSettings has nothing.
  */
-/**
- * Start of the quoted original in a reply/forward body. Outlook (new/web) uses
- * <div id="appendonsend"> and <div id="divRplyFwdMsg"> (often preceded by an <hr>);
- * ids may be x_-prefixed in quoted content. Returns the element to insert before.
- */
-function findQuoteStart(doc: Document): Element | null {
-  const candidates = [
-    "#appendonsend", "#divRplyFwdMsg", "#x_divRplyFwdMsg",
-    "[id^='mail-editor-reference-message-container']", "#divtagdefaultwrapper + hr",
-  ];
-  let first: Element | null = null;
-  for (const sel of candidates) {
-    const el = doc.querySelector(sel);
-    if (el && (!first || first.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) first = el;
-  }
-  if (!first) return null;
-  // Keep the separator line with the quoted block.
-  const prev = first.previousElementSibling;
-  return prev && prev.tagName === "HR" ? prev : first;
-}
 
-function signatureImgHtml(sig: SignatureImage, altText: string): string {
-  const w = Math.round(sig.width / 2);
-  const h = Math.round(sig.height / 2);
-  const safeAlt = altText.replace(/[<>&"]/g, "");
-  return `<img class="${SIG_CLASS}" src="cid:${sig.fileName}" alt="${safeAlt}" width="${w}" height="${h}" style="width:${w}px;height:${h}px;border:0">`;
-}
 
 class RoamingSettingsStore implements SettingsStore {
   get(key: string): string | undefined {
@@ -267,17 +239,7 @@ export class OfficeJsAdapter implements MailAdapter {
     const allImgs = Array.from(doc.querySelectorAll("img"));
     notes.push(`Body has ${allImgs.length} <img> tag(s):`);
     allImgs.forEach((i) => notes.push(`  ${i.outerHTML.replace(/src="data:[^"]{40,}"/, 'src="data:…"').slice(0, 300)}`));
-    const alts = altNames.map((a) => a.trim().toLowerCase()).filter((a) => a.length > 2);
-    const oldImgs = allImgs.filter((img) => {
-      const src = img.getAttribute("src") ?? "";
-      const alt = (img.getAttribute("alt") ?? "").trim().toLowerCase();
-      return (
-        SIG_CLASS_RE.test(img.getAttribute("class") ?? "") ||
-        (alt !== "" && alts.includes(alt)) ||
-        /sig_[^"'/]*\.png/i.test(src) ||
-        removedRefs.some((r) => r.length > 8 && src.includes(r))
-      );
-    });
+    const oldImgs = selectOldSignatureImgs(allImgs, altNames, removedRefs);
     oldImgs.forEach((img) => img.remove());
 
     // 5. Nothing to remove → no rewrite needed; Outlook places the signature and the

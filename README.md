@@ -26,7 +26,7 @@ docs/           Design & decision log
 2. `rustup target add wasm32-unknown-unknown`
 3. `cargo install wasm-bindgen-cli --version 0.2.130` – **must match** the `wasm-bindgen` version in `Cargo.lock`.
 4. **Node.js 20+**.
-5. Optional, for a smaller WASM file: `npm i -g binaryen` (provides `wasm-opt`).
+5. `npm i -g binaryen` (provides `wasm-opt` – shrinks the WASM file; optional but recommended).
 
 ## Build & test
 
@@ -36,7 +36,12 @@ cd addin
 npm install
 npm run build                     # builds WASM, then the add-in into addin/dist (production URLs)
 npm run typecheck
+npm test                          # Vitest: MIME parser, draft HTML editing, WASM round trip
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on every push and keeps the built `dist` as a downloadable artifact.
+
+The embedded font is a Latin-only subset of Allura (`scripts/subset-font.py`). It limits only the **visible signature text** to Latin letters, digits and common punctuation; secrets are never drawn, so they can contain any characters.
 
 ### CLI
 

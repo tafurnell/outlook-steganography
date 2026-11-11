@@ -29,6 +29,7 @@ module.exports = async (env, argv) => {
     output: {
       path: path.resolve(__dirname, "dist"),
       filename: "[name].[contenthash:8].js",
+      chunkFilename: "[name].[contenthash:8].js", // e.g. the KDF Web Worker – hashed, so nginx can cache it long-term
       assetModuleFilename: "assets/[name].[contenthash:8][ext]",
       publicPath: base,
       clean: true,

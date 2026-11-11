@@ -8,6 +8,8 @@ pub enum Error {
     MessageTooLong(usize),
     #[error("display name is empty")]
     EmptyName,
+    #[error("the signature font has no character '{0}' – use Latin letters, digits and common punctuation")]
+    UnsupportedCharacter(char),
     #[error("image is too small to carry the payload ({needed} slots needed, {available} available)")]
     ImageTooSmall { needed: usize, available: usize },
     #[error("unsupported or unreadable image: {0}")]

@@ -1,5 +1,5 @@
 import {
-  createSignature, deriveMasterKey, extractMessage, keyFingerprint, loadCore, maxMessageBytes, utf8Length,
+  createSignature, deriveMasterKeyAsync, extractMessage, keyFingerprint, loadCore, maxMessageBytes, utf8Length,
 } from "../core/stego";
 import type { MailAdapter } from "../mail/MailAdapter";
 import { OfficeJsAdapter } from "../mail/OfficeJsAdapter";
@@ -78,8 +78,12 @@ async function saveSettings(): Promise<void> {
         return;
       }
       setStatus("Deriving key… (takes a moment)");
-      await new Promise((r) => setTimeout(r, 30)); // let the status paint before the CPU-heavy step
-      await mail.settings.set(KEY_SETTING, deriveMasterKey(pass));
+      ($("saveSettings") as HTMLButtonElement).disabled = true;
+      try {
+        await mail.settings.set(KEY_SETTING, await deriveMasterKeyAsync(pass)); // runs in a Web Worker
+      } finally {
+        ($("saveSettings") as HTMLButtonElement).disabled = false;
+      }
       ($("passphrase") as HTMLInputElement).value = "";
     }
     await mail.settings.set(NAME_SETTING, name && name !== mail.userDisplayName() ? name : undefined);

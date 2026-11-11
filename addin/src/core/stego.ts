@@ -19,8 +19,38 @@ export interface SignatureImage {
 
 export const maxMessageBytes = (): number => wasm.maxMessageBytes();
 
-/** Slow by design (Argon2id). Returns the base64 master key to store. */
+/** Slow by design (Argon2id). Returns the base64 master key to store. Blocks the calling thread. */
 export const deriveMasterKey = (passphrase: string): string => wasm.deriveMasterKey(passphrase);
+
+/**
+ * Same as deriveMasterKey, but in a Web Worker so the pane doesn't freeze.
+ * Falls back to the main thread if workers are unavailable in this Outlook host.
+ */
+export async function deriveMasterKeyAsync(passphrase: string): Promise<string> {
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("./kdf.worker.ts", import.meta.url));
+  } catch (e) {
+    console.warn("KDF worker unavailable – deriving on the main thread", e);
+    return deriveMasterKey(passphrase);
+  }
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      worker.onmessage = (e: MessageEvent<{ key?: string; error?: string }>) =>
+        e.data.key ? resolve(e.data.key) : reject(new Error(e.data.error ?? "key derivation failed"));
+      worker.onerror = (ev) => reject(Object.assign(new Error(ev.message || "worker failed"), { workerFailed: true }));
+      worker.postMessage({ passphrase });
+    });
+  } catch (e) {
+    if ((e as { workerFailed?: boolean }).workerFailed) {
+      console.warn("KDF worker failed – deriving on the main thread", e);
+      return deriveMasterKey(passphrase);
+    }
+    throw e; // a real derivation error (e.g. empty passphrase)
+  } finally {
+    worker.terminate();
+  }
+}
 
 export interface RevealedSecret {
   message: string;
