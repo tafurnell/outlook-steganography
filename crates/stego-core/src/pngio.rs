@@ -63,8 +63,29 @@ pub fn decode(bytes: &[u8]) -> Result<RgbImage> {
     let src = &buf[..frame.buffer_size()];
     let data = match frame.color_type {
         png::ColorType::Rgb => src.to_vec(),
-        png::ColorType::Rgba => src.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect(),
+        // Drop every 4th byte (alpha). Written index-based so it compiles cleanly on
+        // any Rust version (newer Clippy flags chunks_exact(4) in favour of as_chunks).
+        png::ColorType::Rgba => src.iter().enumerate().filter(|(i, _)| i % 4 != 3).map(|(_, &b)| b).collect(),
         other => return Err(Error::UnsupportedImage(format!("colour type {other:?}"))),
     };
     Ok(RgbImage { width: w, height: h, data })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgba_decodes_to_rgb() {
+        // 2×1 RGBA image → RGB with alpha dropped.
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, 2, 1);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut w = enc.write_header().unwrap();
+            w.write_image_data(&[1, 2, 3, 255, 4, 5, 6, 128]).unwrap();
+        }
+        assert_eq!(decode(&out).unwrap().data, vec![1, 2, 3, 4, 5, 6]);
+    }
 }
