@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Add-in only (XML) manifest – kept deliberately for mobile-readiness (D-008, D-018).
-  BASE_URL / ORIGIN placeholders (in double braces) are substituted at build time (webpack.config.js).
+  BASE_URL / ORIGIN / ADDIN_ID / DISPLAY_NAME placeholders (in double braces) are substituted at
+  build time (webpack.config.js). Dev and production use different IDs so both can be installed.
   Mobile later: add a <MobileFormFactor> under the MailHost (read surface only).
 -->
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
@@ -9,11 +10,11 @@
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
            xsi:type="MailApp">
-  <Id>fe2ac711-2b65-481d-82aa-71296a26a12a</Id>
+  <Id>{{ADDIN_ID}}</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>ITM Solutions</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
-  <DisplayName DefaultValue="Secure Signature"/>
+  <DisplayName DefaultValue="{{DISPLAY_NAME}}"/>
   <Description DefaultValue="Hide an encrypted code in your signature image, and reveal codes hidden in received messages."/>
   <IconUrl DefaultValue="{{BASE_URL}}assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="{{BASE_URL}}assets/icon-128.png"/>
@@ -118,7 +119,7 @@
           <bt:Url id="Taskpane.Url" DefaultValue="{{BASE_URL}}taskpane.html"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="Group.Label" DefaultValue="Secure Signature"/>
+          <bt:String id="Group.Label" DefaultValue="{{DISPLAY_NAME}}"/>
           <bt:String id="ReadButton.Label" DefaultValue="Check message"/>
           <bt:String id="ComposeButton.Label" DefaultValue="Secure signature"/>
         </bt:ShortStrings>

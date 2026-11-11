@@ -9,6 +9,10 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 const DEV_URL = "https://localhost:3000/";
 const PROD_URL = "https://itmsolutions.co.uk/outlook-stego/";
+// Separate add-in IDs so the dev (localhost) and production add-ins can be installed side by side.
+// Note: Outlook keeps roaming settings per add-in ID, so each needs the passphrase entered once.
+const DEV_ID = "fe2ac711-2b65-481d-82aa-71296a26a12a";
+const PROD_ID = "70da7104-a4f3-49c8-bbcd-67c9b8f4a5cc";
 
 module.exports = async (env, argv) => {
   const dev = argv.mode !== "production";
@@ -49,7 +53,12 @@ module.exports = async (env, argv) => {
             from: "manifest.template.xml",
             to: "manifest.xml",
             transform: (content) =>
-              content.toString().replace(/\{\{BASE_URL\}\}/g, base).replace(/\{\{ORIGIN\}\}/g, origin),
+              content
+                .toString()
+                .replace(/\{\{BASE_URL\}\}/g, base)
+                .replace(/\{\{ORIGIN\}\}/g, origin)
+                .replace(/\{\{ADDIN_ID\}\}/g, dev ? DEV_ID : PROD_ID)
+                .replace(/\{\{DISPLAY_NAME\}\}/g, dev ? "Secure Signature (dev)" : "Secure Signature"),
           },
         ],
       }),
