@@ -21,7 +21,7 @@ An Outlook add-in that lets a user send a short code or message, encrypted and h
 - **F1 – Send:** From the compose window, via a ribbon command (similar in feel to *Attach File*), the user enters a short code/message. The add-in renders the user's name (e.g. "Tim Furnell") as a cursive graphic, encrypts the message, embeds it in that image and inserts the image into the email as the signature.
 - **F2 – Detect:** For received mail, the add-in checks signature images for the payload pattern.
 - **F3 – Reveal:** If a payload is found, it is extracted and decrypted, and the user is told an embedded message is present and can view it.
-- **F4 – Clean replies:** When the signature is added to a reply/forward, previous signature images in the thread are removed (unless this proves complex).
+- **F4 – Clean replies (optional):** When the signature is added to a reply/forward, previous signature images in the thread can be removed – a Settings option, off by default (D-032).
 
 ### Non-functional
 - **N1:** Windows only for v1; prefer choices that keep a path to macOS.
@@ -103,13 +103,13 @@ Personal/consumer accounts can self-install: Outlook → *Get Add-ins* → *My a
 ### Carrier & filename
 - PNG only (lossless). Never JPEG.
 - Filename hint: `sig_<name>.png` (e.g. `sig_timfurnell.png`) – no custom headers (N5).
-- **Risk:** some Outlook clients may rename inline images on send (e.g. `image001.png`). The detector therefore treats the filename as a *fast path* and falls back to trying every inline PNG within a size range. Decoding a small PNG is cheap. Verified in spike S-2.
+- **Confirmed (S-2):** new Outlook renames inline images on send to `<uuid>.png`, so the filename hint is lost. Detection and reply-stripping therefore identify signatures by **decoding the image content** (D-025); the filename is only a fast path where it survives.
 
 ### Payload format (draft, fixed size)
-`magic(4) | version(1) | flags(1) | nonce(12) | ciphertext(130) | tag(16)` = **164 bytes**, always.
-- Plaintext slot = `length(2) | message(≤128 bytes UTF-8) | zero padding` – every image carries the same-size payload, so nothing about message length leaks (D-014).
+`magic(4) | version(1) | flags(1) | nonce(12) | ciphertext(138) | tag(16)` = **172 bytes**, always.
+- Plaintext slot = `sent_at(8, Unix seconds) | length(2) | message(≤128 bytes UTF-8) | zero padding` – every image carries the same-size payload, so nothing about message length leaks (D-014). `sent_at` orders several signatures in one thread (D-024).
 - Detection = magic matches **and** the AES-GCM tag verifies, so false positives are effectively impossible.
-- Embedding: LSB of RGB channels in a keyed pseudo-random pixel order (derived from the key), with the 164-byte payload repeated 3× (majority vote) ≈ 4 KB of bits – about 12% of a 600×150 image's capacity.
+- Embedding: LSB of RGB channels in a keyed pseudo-random pixel order (derived from the key), with the 172-byte payload repeated 3× (majority vote) = 4,128 bits – about 12% of a 600×150 image's capacity.
 
 ### Message length cap – D-014
 - **Max 128 bytes** (UTF-8) – ample for passwords, PINs and shared codes; non-ASCII characters use 2–4 bytes each.
@@ -145,7 +145,7 @@ Mobile is out of scope for phase 1 but **must not be blocked**. On mobile, sendi
 4. **Detection scans regular attachments as well as inline images**, and never relies on the filename (the filename is only a fast path). A mobile send flow may only be able to *attach* the image.
 5. **Versioned, self-describing payload format** (version byte + flags), so a different send path can still produce compatible images.
 6. **Keep the XML (add-in only) manifest** (unified manifest isn't supported on mobile), and keep room to add a `MobileFormFactor` section later.
-7. **Settings in `roamingSettings`** (available on mobile), not browser `localStorage` or cookies.
+7. **Settings in `roamingSettings`** (available on mobile) as the source of truth; `localStorage` only as a fallback cache (D-026), never cookies.
 8. **Responsive task pane UI** (works at phone widths) and a small bundle (watch WASM size: release build, `opt-level = "z"`, `wasm-opt`).
 9. Avoid relying on APIs with no mobile equivalent for *core* flows (e.g. `displayDialogAsync`); use them only as optional extras.
 
@@ -174,8 +174,17 @@ Mobile is out of scope for phase 1 but **must not be blocked**. On mobile, sendi
 | D-019 | 2026-11-10 | Serve add-in files via a dedicated **nginx `location ^~ /outlook-stego/`** block (static only, cache headers, no frame-blocking headers) | Accepted | Pi runs nginx; keeps the add-in isolated from WordPress/PHP and allows Outlook to iframe the pane. |
 | D-020 | 2026-11-10 | Both ribbon buttons open the **task pane** (read: *Check message*, pinnable; compose: *Secure signature*). Signature placed with `setSignatureAsync` (Mailbox 1.10) when available, otherwise at the cursor. Manifest minimum **Mailbox 1.8** | Accepted | Compose needs input (the secret); `setSignatureAsync` puts the image above quoted text on replies; 1.8 provides attachment read/insert APIs. |
 | D-021 | 2026-11-10 | Core crypto/image crates: RustCrypto `aes-gcm 0.10` (no default features – no RNG in core), `argon2 0.5`, `hkdf 0.12`, `png 0.17`, `ab_glyph 0.2`, `rand_chacha 0.3` | Accepted | Mature, stable APIs; core stays RNG-free (nonce supplied by caller). Newer major versions exist – upgrade deliberately, re-running the pixel-order fingerprint test. |
-| D-022 | 2026-11-10 | Pixel order spec: ChaCha20 (seed = HKDF pixel key), `slot = next_u64() % slots`, skip duplicates; copy *r* of bit *i* at position `r·1312 + i`; images need ≥ 2× the 3,936 slots required | Accepted | Simple, deterministic across native and WASM (verified: images cross-decode); a unit test pins the sequence so it can't silently change. |
+| D-022 | 2026-11-10 | Pixel order spec: ChaCha20 (seed = HKDF pixel key), `slot = next_u64() % slots`, skip duplicates; copy *r* of bit *i* at position `r·1376 + i`; images need ≥ 2× the 4,128 slots required | Accepted | Simple, deterministic across native and WASM (verified: images cross-decode); a unit test pins the sequence so it can't silently change. |
 | D-023 | 2026-11-10 | Settings show a **Key ID** (first 4 bytes of SHA-256 of the derived key, e.g. `3F9A-12C0`) | Accepted | Lets users confirm they share the same passphrase without revealing it. |
+| D-024 | 2026-11-10 | Payload carries an encrypted **`sent_at` timestamp**; read pane sorts by it and labels *Latest* / *Earlier in this thread* (payload grows to 172 bytes; still v1 as nothing is deployed) | Accepted | S-2: attachment order didn't reflect send order; the timestamp is authenticated and independent of client HTML. |
+| D-025 | 2026-11-10 | Reply stripping identifies old signatures by **decoding each inline PNG** in the draft, then removes matching `<img>` tags by our class (incl. Outlook's `x_` prefix), legacy `sig_` names, or reference to a removed attachment | Accepted (re-test) | S-2: new Outlook renamed images to `<uuid>.png`, so name-based stripping failed. |
+| D-026 | 2026-11-10 | Settings also cached in the add-in origin's **localStorage**, used only when roamingSettings returns nothing; **Back** button in Settings | Accepted | S-1: a key saved in one pane was missing in the next pane (stale roamingSettings snapshot) until the pane was reopened. |
+| D-027 | 2026-11-10 | On consumer (Outlook.com) accounts detection is **per message, on click** (*Check selected message*); the pane shows the subject it checked plus per-attachment **Details** for diagnosis | Accepted | Pinnable task panes aren't available for Outlook.com, so D-007's "pinned pane ≈ automatic" doesn't hold for phase 1. Automatic detection needs a Microsoft 365 work/school mailbox (pinning) or admin-deployed events (phase 2). |
+| D-028 | 2026-11-10 | Add **Reply / Reply all with secure signature** to the read pane (`displayReplyFormAsync` with an inline Base64 attachment, Mailbox 1.15, feature-detected); reply stripping additionally matches the quoted placeholder by our `alt` text. F4 (strip old signatures) downgraded to **best effort** – the receiver shows only the latest secret (D-024) | Accepted (re-test) | New Outlook keeps an open pane bound to the read item and hides quoted images from the draft; replying from the read pane avoids the pane switch entirely. |
+| D-029 | 2026-11-10 | **Withdraw** *Reply with a secret* (D-028's `displayReplyFormAsync` route). Keep: compose-pane insertion, alt-text match for quoted placeholders, best-effort stripping. Add one automatic retry for attachment reads | Accepted | Test: new Outlook ignored `inLine` for the Base64 reply attachment – the image appeared in the attachment well (cropped preview) plus a broken inline reference, was sent twice under the same name, and both copies failed to read (`GenericResponseError`). |
+| D-030 | 2026-11-10 | Compose: remove old signatures and insert the new one in **one body rewrite**, placing it directly **above the quoted message** (before Outlook's `appendonsend` / `divRplyFwdMsg` markers, keeping the `<hr>` with the quote); new messages still use `setSignatureAsync` | Accepted (re-test) | Test: alt-text match removed the quoted old signature (placeholder `<img data-imagetype="AttachmentByCid" alt="Tim Furnell">`), but rewriting the body lost Outlook's signature position, so the new signature was appended at the very end. Outlook shows an "altered by add-in" notice on body rewrites – expected. |
+| D-031 | 2026-11-10 | **Raw-message fallback**: if `getAttachmentContentAsync` fails, read the whole message with `getAsFileAsync` (Mailbox 1.14) and extract PNG parts with a small built-in MIME parser (`addin/src/mail/mime.ts`). Compose UX: *write the message first, then insert the signature* | Accepted (re-test) | Test: signature now placed correctly above the quote, but the received reply's inline `sig_timfurnell.png` failed to read via `getAttachmentContentAsync` (`GenericResponseError`) even with retry. After a body rewrite Outlook leaves the cursor at the end; Office.js can't move it. |
+| D-032 | 2026-11-10 | Removing previous signatures is a **Settings option, off by default** ("Remove previous secure signatures when replying"). Off: no body rewrite – image inserted via `setSignatureAsync`, cursor untouched, quoted old signatures kept. On: all recognised old signatures removed in one rewrite and the new one placed above the quote; Outlook then moves the cursor to the end of the body (for long chains, the end of the chain). If nothing is found to remove, no rewrite happens | Accepted | Owner preference: predictable cursor behaviour matters more than tidying quoted text; recipients see only the latest secret anyway (D-024). |
 
 ## 8. Open questions
 
@@ -204,6 +213,22 @@ _No open questions at present._ (~~Q-15 web server~~ → D-019)
 - Run Argon2id in a Web Worker so the UI doesn't freeze during key derivation.
 - TypeScript unit tests (adapter mocked) and an automated round-trip test in CI.
 - Body-order detection of "newest" signature in long threads (currently attachment order, hinted names first).
+
+### Test results – S-1 / S-2, new Outlook for Windows, Outlook.com accounts (2026-11-10)
+| Check | Result |
+|---|---|
+| Install from file (XML manifest) | ✅ after re-downloading the manifest (a dark-mode browser extension had injected attributes into a browser-saved copy) |
+| Key setup | ⚠️ new pane didn't see the saved key until reopened → D-026 |
+| Send / receive / decode | ✅ signature looked sharp; secret decoded correctly |
+| Filename preserved | ❌ renamed to `<uuid>.png` → D-025 |
+| Reply stripping | ❌ old image not removed → D-025 (re-test) |
+| Thread ordering | ❌ "newest first" was wrong → D-024 |
+| Opening the pane | ⚠️ several clicks (More apps → Secure Signature) – pin the add-in to the toolbar / message surface in Outlook's settings; automatic opening needs admin-deployed events (phase 2) |
+| Conversation view | ⚠️ the pane acts on the *selected* message within a thread; self-sent messages appear only inside the conversation |
+| Pinning the read pane | ❌ **not available for Outlook.com accounts** (Microsoft limitation) – no pin icon, and `ItemChanged` doesn't fire, so an open pane can keep checking the message it was opened on → D-027 |
+| Info bar without opening the pane | ❌ expected – nothing runs until the pane is opened (automatic triggers need admin deployment) |
+| Pane switching to compose on Reply (1 s polling) | ❌ the open pane isn't given the new reply item; close/reopen needed → D-028 |
+| Quoted old signature in reply draft | ❌ new Outlook exposes **0 attachments** in the draft and the quoted image only as a 1×1 `data:image/gif` placeholder, so it can't be decoded or matched by name → D-028 (alt-text match being tested) |
 
 ## 10. Spikes / next steps
 

@@ -25,8 +25,11 @@
       <input id="passphrase" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. five random words" />
       <label for="displayName">Name shown in signature</label>
       <input id="displayName" type="text" autocomplete="name" />
+      <label class="inline"><input id="removeOld" type="checkbox" /> Remove previous secure signatures when replying</label>
+      <p class="hint">Off: earlier signatures stay in the quoted text (recipients still see only the latest secret). On: they're removed, but Outlook rewrites the email and moves the cursor to the very end.</p>
       <div class="row">
         <button id="saveSettings" type="button" class="primary">Save</button>
+        <button id="backFromSettings" type="button">Back</button>
         <button id="forgetKey" type="button">Remove key</button>
       </div>
     </section>
@@ -40,21 +43,31 @@
       <input id="secret" type="password" autocomplete="off" spellcheck="false" />
       <label class="inline"><input id="showSecretInput" type="checkbox" /> Show while typing</label>
       <button id="insertSig" type="button" class="primary">Insert signature</button>
-      <p class="hint">Previous secure signatures in this draft (e.g. from a reply) are removed first.</p>
+      <p id="composeHint" class="hint"></p>
+      <details id="composeDiagnostics">
+        <summary class="hint">Details</summary>
+        <ul id="composeDiagList" class="hint"></ul>
+      </details>
     </section>
 
     <!-- Read: results -->
     <section id="readView" hidden>
       <h2>This message</h2>
+      <p id="checkedSubject" class="hint"></p>
       <div id="results"></div>
-      <button id="recheck" type="button">Check again</button>
-      <p class="hint">Tip: pin this pane to check every message you open.</p>
+      <button id="recheck" type="button" class="primary">Check selected message</button>
+
+      <details id="diagnostics">
+        <summary class="hint">Details</summary>
+        <ul id="diagList" class="hint"></ul>
+      </details>
+      <p class="hint">Outlook.com accounts can't pin add-in panes, so the pane may not follow your selection – click <em>Check selected message</em> after choosing another email.</p>
     </section>
   </main>
 
   <template id="secretCard">
     <div class="card">
-      <div class="card-title">Embedded secret found <span class="src hint"></span></div>
+      <div class="card-title"><span class="label">Embedded secret</span> <span class="src hint"></span></div>
       <code class="secret masked">••••••••</code>
       <div class="row">
         <button type="button" class="show primary">Show secret</button>

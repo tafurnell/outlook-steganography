@@ -3,11 +3,11 @@
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 
-use crate::format::{self, HEADER_LEN, NONCE_LEN, PAYLOAD_LEN};
+use crate::format::{self, Revealed, HEADER_LEN, NONCE_LEN, PAYLOAD_LEN};
 use crate::{Error, MasterKey, Result};
 
-pub fn seal(key: &MasterKey, message: &str, nonce: [u8; NONCE_LEN]) -> Result<Vec<u8>> {
-    let plain = format::pad(message)?;
+pub fn seal(key: &MasterKey, message: &str, sent_at: u64, nonce: [u8; NONCE_LEN]) -> Result<Vec<u8>> {
+    let plain = format::pad(message, sent_at)?;
     let header = format::header(0);
     let cipher = Aes256Gcm::new_from_slice(&key.encryption_key()).map_err(|_| Error::InvalidKey)?;
     let ct = cipher
@@ -21,7 +21,7 @@ pub fn seal(key: &MasterKey, message: &str, nonce: [u8; NONCE_LEN]) -> Result<Ve
     Ok(out)
 }
 
-pub fn open(key: &MasterKey, payload: &[u8]) -> Result<String> {
+pub fn open(key: &MasterKey, payload: &[u8]) -> Result<Revealed> {
     if payload.len() != PAYLOAD_LEN || payload[..4] != format::MAGIC {
         return Err(Error::MalformedPayload);
     }
@@ -45,8 +45,8 @@ mod tests {
     #[test]
     fn seal_open_and_tamper() {
         let k = derive_master_key_with_params("pw", &KdfParams::insecure_fast_for_tests()).unwrap();
-        let mut p = seal(&k, "hello", [3; 12]).unwrap();
-        assert_eq!(open(&k, &p).unwrap(), "hello");
+        let mut p = seal(&k, "hello", 42, [3; 12]).unwrap();
+        assert_eq!(open(&k, &p).unwrap(), Revealed { message: "hello".into(), sent_at: 42 });
         p[40] ^= 1;
         assert_eq!(open(&k, &p), Err(Error::Decrypt));
     }

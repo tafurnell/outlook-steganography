@@ -81,7 +81,8 @@ fn main() -> Result<()> {
             let key = master_key(&key)?;
             let mut nonce = [0u8; 12];
             getrandom::getrandom(&mut nonce).map_err(|e| anyhow!("RNG failure: {e}"))?;
-            let png = stego_core::create_signature(&key, &name, &message, nonce, &RenderOptions::default())?;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
+            let png = stego_core::create_signature(&key, &name, &message, now, nonce, &RenderOptions::default())?;
             let out = out.unwrap_or_else(|| PathBuf::from(stego_core::signature_filename(&name)));
             std::fs::write(&out, &png).with_context(|| format!("writing {}", out.display()))?;
             let (w, h) = stego_core::pngio::dimensions(&png)?;
@@ -98,9 +99,9 @@ fn main() -> Result<()> {
             for f in files {
                 let bytes = std::fs::read(&f).with_context(|| format!("reading {}", f.display()))?;
                 match stego_core::extract_message(&key, &bytes)? {
-                    Some(msg) => {
+                    Some(r) => {
                         found = true;
-                        println!("{}: {msg}", f.display());
+                        println!("{}: {} (sent_at={})", f.display(), r.message, r.sent_at);
                     }
                     None => eprintln!("{}: no embedded message", f.display()),
                 }

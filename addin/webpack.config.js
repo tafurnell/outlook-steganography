@@ -60,7 +60,8 @@ module.exports = async (env, argv) => {
     const devCerts = require("office-addin-dev-certs");
     config.devServer = {
       port: 3000,
-      headers: { "Access-Control-Allow-Origin": "*" },
+      // no-store: stop Outlook's embedded browser serving stale dev builds
+      headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" },
       server: { type: "https", options: await devCerts.getHttpsServerOptions() },
       static: false,
     };

@@ -6,6 +6,7 @@ import { OfficeJsAdapter } from "../mail/OfficeJsAdapter";
 
 const KEY_SETTING = "ostg.masterKey";
 const NAME_SETTING = "ostg.displayName";
+const REMOVE_OLD_SETTING = "ostg.removeOldSignatures";
 const REVEAL_MS = 30_000;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -20,7 +21,11 @@ function setStatus(text: string, error = false): void {
   s.classList.toggle("error", error);
 }
 
+let currentView: "settings" | "compose" | "read" = "read";
+let lastItemKey = "";
+
 function show(view: "settings" | "compose" | "read"): void {
+  currentView = view;
   $("settingsView").hidden = view !== "settings";
   $("composeView").hidden = view !== "compose";
   $("readView").hidden = view !== "read";
@@ -28,8 +33,10 @@ function show(view: "settings" | "compose" | "read"): void {
 
 const storedKey = () => mail.settings.get(KEY_SETTING);
 const displayName = () => mail.settings.get(NAME_SETTING) || mail.userDisplayName();
+const removeOld = () => mail.settings.get(REMOVE_OLD_SETTING) === "1";
 
 function mainView(): void {
+  lastItemKey = mail.currentItemKey();
   if (!storedKey()) {
     openSettings();
     setStatus("Set the shared passphrase to get started.");
@@ -38,6 +45,9 @@ function mainView(): void {
   if (mail.mode === "compose") {
     show("compose");
     ($("sigName") as HTMLInputElement).value = displayName();
+    $("composeHint").innerHTML = removeOld()
+      ? "Previous secure signatures in this draft are removed. <strong>Write your message first</strong> – if any are removed, Outlook moves the cursor to the end of the email."
+      : "Earlier secure signatures in quoted text are kept (change in Settings).";
     updateCounter();
   } else {
     show("read");
@@ -50,7 +60,9 @@ function mainView(): void {
 async function openSettings(): Promise<void> {
   show("settings");
   ($("displayName") as HTMLInputElement).value = displayName();
+  ($("removeOld") as HTMLInputElement).checked = removeOld();
   const key = storedKey();
+  $("backFromSettings").hidden = !key;
   $("keyInfo").textContent = key
     ? `Key set – ID ${await keyFingerprint(key)}. Compare this ID with your contacts to confirm you share the same passphrase.`
     : "No key set yet.";
@@ -71,6 +83,7 @@ async function saveSettings(): Promise<void> {
       ($("passphrase") as HTMLInputElement).value = "";
     }
     await mail.settings.set(NAME_SETTING, name && name !== mail.userDisplayName() ? name : undefined);
+    await mail.settings.set(REMOVE_OLD_SETTING, ($("removeOld") as HTMLInputElement).checked ? "1" : undefined);
     setStatus("Settings saved.");
     mainView();
   } catch (e) {
@@ -103,11 +116,22 @@ async function insertSignature(): Promise<void> {
   btn.disabled = true;
   try {
     setStatus("Creating signature…");
-    const removed = await mail.removeExistingSignatures();
     const sig = createSignature(key, name, secretEl.value);
-    await mail.insertSignature(sig, name);
+    const report = await mail.replaceSignature(
+      sig, name, (png) => extractMessage(key, png) !== undefined, [name, displayName()], removeOld(),
+    );
+    $("composeDiagList").replaceChildren(
+      ...report.notes.map((n) => Object.assign(document.createElement("li"), { textContent: n })),
+    );
     secretEl.value = "";
-    setStatus(removed ? `Signature added (replaced ${removed} previous).` : "Signature added.");
+    const removed = Math.max(report.attachmentsRemoved, report.imgTagsRemoved);
+    setStatus(
+      removed
+        ? `Signature added (removed ${report.attachmentsRemoved} old image(s), ${report.imgTagsRemoved} quoted tag(s)).`
+        : removeOld()
+          ? "Signature added. No previous secure signature found in this draft – see Details."
+          : "Signature added.",
+    );
   } catch (e) {
     setStatus(`Could not add signature: ${(e as Error).message ?? e}`, true);
   } finally {
@@ -121,6 +145,8 @@ function clearResults(): void {
   hideTimers.forEach((t) => clearTimeout(t));
   hideTimers = [];
   $("results").replaceChildren(); // drops revealed secrets from the DOM
+  $("diagList").replaceChildren();
+  $("checkedSubject").textContent = "";
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -142,12 +168,18 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-function addSecretCard(secret: string, source: string): void {
+const fmtTime = (d: Date) =>
+  d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+function addSecretCard(secret: string, sentAt: Date, latest: boolean | undefined, container: HTMLElement = $("results")): void {
   const tpl = $("secretCard") as HTMLTemplateElement;
   const card = tpl.content.firstElementChild!.cloneNode(true) as HTMLElement;
   const code = card.querySelector(".secret") as HTMLElement;
   const showBtn = card.querySelector(".show") as HTMLButtonElement;
-  (card.querySelector(".src") as HTMLElement).textContent = `(${source})`;
+  (card.querySelector(".label") as HTMLElement).textContent =
+    latest === undefined ? "Embedded secret" : latest ? "Latest secret" : "Earlier in this thread";
+  (card.querySelector(".src") as HTMLElement).textContent = `– added ${fmtTime(sentAt)}`;
+  if (latest === false) card.classList.add("older");
 
   const mask = () => {
     code.textContent = "••••••••";
@@ -165,7 +197,7 @@ function addSecretCard(secret: string, source: string): void {
   (card.querySelector(".copy") as HTMLButtonElement).addEventListener("click", async () => {
     setStatus((await copyText(secret)) ? "Copied to clipboard." : "Copy failed – use Show secret instead.", false);
   });
-  $("results").appendChild(card);
+  container.appendChild(card);
 }
 
 async function scan(): Promise<void> {
@@ -175,25 +207,78 @@ async function scan(): Promise<void> {
   if (!key) return;
   setStatus("Checking for hidden messages…");
   try {
-    const images = await mail.listCandidateImages();
+    const { subject, images, notes } = await mail.listCandidateImages();
     if (gen !== scanGeneration) return; // user moved to another message
-    const found: { secret: string; source: string }[] = [];
-    for (const img of images) {
-      const secret = extractMessage(key, img.bytes);
-      if (secret !== undefined) found.push({ secret, source: img.name });
-    }
+    $("checkedSubject").textContent = `Checked: “${subject || "(no subject)"}” at ${new Date().toLocaleTimeString()}`;
+    const decoded = new Map<string, boolean>();
+    const found = images
+      .map((img) => {
+        const r = extractMessage(key, img.bytes);
+        decoded.set(img.id, r !== undefined);
+        return r;
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== undefined)
+      .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime()); // newest first, by the time sealed inside
     if (gen !== scanGeneration) return;
+    renderDiagnostics(notes, images, decoded);
     if (found.length) {
-      found.forEach((f) => addSecretCard(f.secret, f.source));
-      setStatus(found.length === 1 ? "This message contains an embedded secret." : `${found.length} embedded secrets found (newest first if the thread was replied to).`);
+      // Latest shown; earlier ones (quoted replies) collapsed.
+      addSecretCard(found[0].message, found[0].sentAt, found.length === 1 ? undefined : true);
+      if (found.length > 1) {
+        const more = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.className = "hint";
+        summary.textContent = `Show ${found.length - 1} earlier secret(s) from this thread`;
+        more.appendChild(summary);
+        found.slice(1).forEach((f) => addSecretCard(f.message, f.sentAt, false, more));
+        $("results").appendChild(more);
+      }
+      setStatus(
+        found.length === 1
+          ? "This message contains an embedded secret."
+          : `${found.length} embedded secrets in this thread – the latest is shown first.`,
+      );
       await mail.notify("This message contains an embedded secret. Open Secure Signature to view it.");
     } else {
-      setStatus(images.length ? "No hidden message in this email." : "No signature images in this email.");
+      const recovered = notes.some((n) => n.outcome.startsWith("fallback: extracted"));
+      const failed = recovered ? 0 : notes.filter((n) => n.outcome.startsWith("read failed")).length;
+      setStatus(
+        failed
+          ? `Couldn't read ${failed} image attachment(s) – see Details.`
+          : images.length
+            ? "No hidden message for your key in this email."
+            : notes.length
+              ? "No PNG images in this email – see Details."
+              : "This email has no attachments or embedded images.",
+        failed > 0,
+      );
       await mail.clearNotification();
     }
   } catch (e) {
     if (gen === scanGeneration) setStatus(`Check failed: ${(e as Error).message ?? e}`, true);
   }
+}
+
+function renderDiagnostics(
+  notes: import("../mail/MailAdapter").AttachmentNote[],
+  images: import("../mail/MailAdapter").CandidateImage[],
+  decoded: Map<string, boolean>,
+): void {
+  const byName = new Map(images.map((i) => [i.name, i]));
+  const list = $("diagList");
+  list.replaceChildren(
+    ...(notes.length ? notes : [null]).map((n) => {
+      const li = document.createElement("li");
+      if (!n) {
+        li.textContent = "No attachments reported by Outlook for this item.";
+        return li;
+      }
+      const img = byName.get(n.name);
+      const result = img ? (decoded.get(img.id) ? " → secret found" : " → no secret for this key") : "";
+      li.textContent = `${n.name} (${n.contentType || "?"}, ${n.isInline ? "inline" : "attached"}, ${Math.round(n.size / 1024)} KB): ${n.outcome}${result}`;
+      return li;
+    }),
+  );
 }
 
 /* ---------------- Boot ---------------- */
@@ -210,6 +295,7 @@ Office.onReady(async () => {
   $("settingsToggle").addEventListener("click", () => ($("settingsView").hidden ? openSettings() : mainView()));
   $("saveSettings").addEventListener("click", saveSettings);
   $("forgetKey").addEventListener("click", forgetKey);
+  $("backFromSettings").addEventListener("click", () => mainView());
   $("secret").addEventListener("input", updateCounter);
   $("showSecretInput").addEventListener("change", (e) => {
     ($("secret") as HTMLInputElement).type = (e.target as HTMLInputElement).checked ? "text" : "password";
@@ -222,6 +308,21 @@ Office.onReady(async () => {
     clearResults();
     if (Office.context.mailbox.item) mainView();
   });
+
+  // Without pinning (Outlook.com) ItemChanged doesn't fire, and new Outlook can keep
+  // the pane open when you switch message or click Reply. Poll for a change of item
+  // or read/compose mode and refresh the view (cheap: compares a short string).
+  const refreshIfItemChanged = () => {
+    if (currentView === "settings") return;
+    const key = mail.currentItemKey();
+    if (key !== lastItemKey) {
+      clearResults();
+      mainView();
+    }
+  };
+  window.setInterval(refreshIfItemChanged, 1000);
+  document.addEventListener("visibilitychange", refreshIfItemChanged);
+  window.addEventListener("focus", refreshIfItemChanged);
 
   mainView();
 });

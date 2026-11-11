@@ -18,22 +18,24 @@ pub mod render;
 pub mod stego;
 
 pub use error::{Error, Result};
-pub use format::{MAX_MESSAGE_BYTES, PAYLOAD_LEN};
+pub use format::{Revealed, MAX_MESSAGE_BYTES, PAYLOAD_LEN};
 pub use keys::{derive_master_key, derive_master_key_with_params, KdfParams, MasterKey};
 pub use render::RenderOptions;
 
 /// Render `display_name` as a cursive signature and hide an encrypted `message` in it.
 ///
-/// `nonce` must be 12 fresh random bytes per message (the caller supplies them so
-/// this crate stays free of platform RNG dependencies).
+/// `sent_at` is the current time in Unix seconds and `nonce` 12 fresh random
+/// bytes; both are supplied by the caller so this crate stays free of clock and
+/// RNG dependencies.
 pub fn create_signature(
     key: &MasterKey,
     display_name: &str,
     message: &str,
+    sent_at: u64,
     nonce: [u8; 12],
     options: &RenderOptions,
 ) -> Result<Vec<u8>> {
-    let payload = crypto::seal(key, message, nonce)?;
+    let payload = crypto::seal(key, message, sent_at, nonce)?;
     let mut image = render::render_signature(display_name, options)?;
     stego::embed(&mut image, &payload, &key.pixel_order_key())?;
     pngio::encode_rgb(&image)
@@ -42,9 +44,9 @@ pub fn create_signature(
 /// Try to extract and decrypt a hidden message from PNG bytes.
 ///
 /// Returns `Ok(None)` when the image carries no payload for this key (the
-/// normal case for ordinary images), `Ok(Some(message))` on success, and
+/// normal case for ordinary images), `Ok(Some(revealed))` on success, and
 /// `Err` only for images that cannot be read at all.
-pub fn extract_message(key: &MasterKey, png_bytes: &[u8]) -> Result<Option<String>> {
+pub fn extract_message(key: &MasterKey, png_bytes: &[u8]) -> Result<Option<Revealed>> {
     let image = match pngio::decode(png_bytes) {
         Ok(img) => img,
         Err(Error::UnsupportedImage(_)) => return Ok(None),
@@ -88,13 +90,14 @@ mod tests {
     #[test]
     fn round_trip() {
         let k = key("correct horse battery staple");
-        let png = create_signature(&k, "Tim Furnell", "Code: 4711-XYZ", [7; 12], &RenderOptions::default()).unwrap();
-        assert_eq!(extract_message(&k, &png).unwrap().as_deref(), Some("Code: 4711-XYZ"));
+        let png = create_signature(&k, "Tim Furnell", "Code: 4711-XYZ", 1_762_786_000, [7; 12], &RenderOptions::default()).unwrap();
+        let r = extract_message(&k, &png).unwrap().unwrap();
+        assert_eq!((r.message.as_str(), r.sent_at), ("Code: 4711-XYZ", 1_762_786_000));
     }
 
     #[test]
     fn wrong_key_finds_nothing() {
-        let png = create_signature(&key("alpha"), "Tim Furnell", "secret", [1; 12], &RenderOptions::default()).unwrap();
+        let png = create_signature(&key("alpha"), "Tim Furnell", "secret", 0, [1; 12], &RenderOptions::default()).unwrap();
         assert_eq!(extract_message(&key("beta"), &png).unwrap(), None);
     }
 

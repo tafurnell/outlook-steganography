@@ -22,9 +22,15 @@ export const maxMessageBytes = (): number => wasm.maxMessageBytes();
 /** Slow by design (Argon2id). Returns the base64 master key to store. */
 export const deriveMasterKey = (passphrase: string): string => wasm.deriveMasterKey(passphrase);
 
+export interface RevealedSecret {
+  message: string;
+  /** When the signature was created (sender's clock). */
+  sentAt: Date;
+}
+
 export function createSignature(keyB64: string, displayName: string, message: string): SignatureImage {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const s = wasm.createSignature(keyB64, displayName, message, nonce);
+  const s = wasm.createSignature(keyB64, displayName, message, Math.floor(Date.now() / 1000), nonce);
   try {
     return { png: s.png, width: s.width, height: s.height, fileName: s.fileName };
   } finally {
@@ -32,9 +38,16 @@ export function createSignature(keyB64: string, displayName: string, message: st
   }
 }
 
-/** The hidden message, or undefined if this image carries none for this key. */
-export const extractMessage = (keyB64: string, png: Uint8Array): string | undefined =>
-  wasm.extractMessage(keyB64, png) ?? undefined;
+/** The hidden message and send time, or undefined if this image carries none for this key. */
+export function extractMessage(keyB64: string, png: Uint8Array): RevealedSecret | undefined {
+  const r = wasm.extractMessage(keyB64, png);
+  if (!r) return undefined;
+  try {
+    return { message: r.message, sentAt: new Date(r.sentAt * 1000) };
+  } finally {
+    r.free();
+  }
+}
 
 export const isSignatureFileName = (name: string): boolean => wasm.isSignatureFileName(name);
 
