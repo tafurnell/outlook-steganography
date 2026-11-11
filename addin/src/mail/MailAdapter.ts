@@ -23,8 +23,11 @@ export interface AttachmentNote {
 }
 
 export interface ScanResult {
-  /** Subject of the item actually being checked (so the user can see it matches). */
+  /** Subject, sender and received time of the item actually being checked, so the user can
+   *  tell when the pane is still bound to an older message (no pinning on Outlook.com). */
   subject: string;
+  from: string;
+  received?: Date;
   images: CandidateImage[];
   notes: AttachmentNote[];
 }

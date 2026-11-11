@@ -126,7 +126,7 @@ export class OfficeJsAdapter implements MailAdapter {
 
   async listCandidateImages(): Promise<ScanResult> {
     const item = this.read;
-    if (!item) return { subject: "(no message selected)", images: [], notes: [] };
+    if (!item) return { subject: "(no message selected)", from: "", images: [], notes: [] };
     const images: CandidateImage[] = [];
     const notes: AttachmentNote[] = [];
     for (const a of item.attachments ?? []) {
@@ -185,7 +185,9 @@ export class OfficeJsAdapter implements MailAdapter {
       }
     }
     images.sort((x, y) => Number(y.hinted) - Number(x.hinted));
-    return { subject: item.subject ?? "", images, notes };
+    const from = item.from?.displayName || item.from?.emailAddress || "";
+    const received = item.dateTimeCreated instanceof Date ? item.dateTimeCreated : undefined;
+    return { subject: item.subject ?? "", from, received, images, notes };
   }
 
   currentItemKey(): string {
@@ -226,16 +228,16 @@ export class OfficeJsAdapter implements MailAdapter {
         notes.push(`${label}: skipped`);
         continue;
       }
-      let ours = isSignatureFileName(a.name);
-      if (!ours) {
-        try {
-          const c = await callWithRetry<Office.AttachmentContent>((cb) => item.getAttachmentContentAsync(a.id, cb));
-          ours = c.format === Office.MailboxEnums.AttachmentContentFormat.Base64 && isOurs(b64ToBytes(c.content));
-        } catch (e) {
-          const err = e as Office.Error;
-          notes.push(`${label}: read failed ${err?.name ?? ""} ${err?.message ?? String(e)}`);
-          continue;
-        }
+      // Always decode: names are neutral (image0NN.png) or renamed by Outlook, so a
+      // name alone must never cause someone else's image to be removed.
+      let ours = false;
+      try {
+        const c = await callWithRetry<Office.AttachmentContent>((cb) => item.getAttachmentContentAsync(a.id, cb));
+        ours = c.format === Office.MailboxEnums.AttachmentContentFormat.Base64 && isOurs(b64ToBytes(c.content));
+      } catch (e) {
+        const err = e as Office.Error;
+        notes.push(`${label}: read failed ${err?.name ?? ""} ${err?.message ?? String(e)}`);
+        continue;
       }
       if (ours) {
         try {

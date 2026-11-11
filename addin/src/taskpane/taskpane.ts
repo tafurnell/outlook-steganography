@@ -207,9 +207,12 @@ async function scan(): Promise<void> {
   if (!key) return;
   setStatus("Checking for hidden messages…");
   try {
-    const { subject, images, notes } = await mail.listCandidateImages();
+    const { subject, from, received, images, notes } = await mail.listCandidateImages();
     if (gen !== scanGeneration) return; // user moved to another message
-    $("checkedSubject").textContent = `Checked: “${subject || "(no subject)"}” at ${new Date().toLocaleTimeString()}`;
+    const sentBy = from ? ` from ${from}` : "";
+    const when = received ? `, received ${fmtTime(received)}` : "";
+    $("checkedSubject").textContent =
+      `Checked: “${subject || "(no subject)"}”${sentBy}${when} (at ${new Date().toLocaleTimeString()})`;
     const decoded = new Map<string, boolean>();
     const found = images
       .map((img) => {

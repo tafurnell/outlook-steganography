@@ -2,13 +2,15 @@
 // Requires: rustup target add wasm32-unknown-unknown
 //           cargo install wasm-bindgen-cli --version <same as Cargo.lock>
 // Optional: wasm-opt (npm i -g binaryen) for a smaller bundle.
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+// cargo and wasm-bindgen are real executables, so no shell is needed (and passing an
+// argument list *with* a shell is deprecated in Node – DEP0190).
+const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: "inherit" });
 
 run("cargo", ["build", "--release", "--target", "wasm32-unknown-unknown", "-p", "stego-wasm"]);
 const wasm = join(root, "target", "wasm32-unknown-unknown", "release", "stego_wasm.wasm");
@@ -17,7 +19,12 @@ run("wasm-bindgen", ["--target", "web", "--out-dir", out, wasm]);
 
 const bg = join(out, "stego_wasm_bg.wasm");
 try {
-  run("wasm-opt", ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", "-o", bg, bg]);
+  // wasm-opt from npm (binaryen) is a .cmd shim on Windows, which needs a shell –
+  // so pass a single, quoted command string rather than an argument list.
+  execSync(`wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int -o "${bg}" "${bg}"`, {
+    cwd: root,
+    stdio: ["ignore", "inherit", "ignore"],
+  });
 } catch {
   console.warn("wasm-opt not found – skipping size optimisation (npm i -g binaryen)");
 }

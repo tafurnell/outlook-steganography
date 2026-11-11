@@ -15,11 +15,21 @@ pub struct RenderOptions {
     pub padding_px: u32,
     pub ink: [u8; 3],
     pub background: [u8; 3],
+    /// Minimum canvas width in pixels (2×). Short texts ("Tim", "Best") get extra white
+    /// space on the right so the fixed-size payload alters only a small share of the
+    /// image – keeps it as hard to detect statistically as a full name (D-035).
+    pub min_width_px: u32,
 }
 
 impl Default for RenderOptions {
     fn default() -> Self {
-        RenderOptions { font_px: 160.0, padding_px: 28, ink: [0x1F, 0x2A, 0x44], background: [0xFF, 0xFF, 0xFF] }
+        RenderOptions {
+            font_px: 160.0,
+            padding_px: 28,
+            ink: [0x1F, 0x2A, 0x44],
+            background: [0xFF, 0xFF, 0xFF],
+            min_width_px: 400,
+        }
     }
 }
 
@@ -59,7 +69,8 @@ pub fn render_signature(name: &str, opt: &RenderOptions) -> Result<RgbImage> {
         max_y = max_y.max(b.max.y);
     }
     let pad = opt.padding_px as f32;
-    let width = ((max_x - min_x) + 2.0 * pad).ceil() as u32;
+    // Text stays left-aligned; any extra width is white space on the right.
+    let width = (((max_x - min_x) + 2.0 * pad).ceil() as u32).max(opt.min_width_px);
     let height = ((max_y - min_y) + 2.0 * pad).ceil() as u32;
     let mut img = RgbImage::new_filled(width, height, opt.background);
 
@@ -94,6 +105,15 @@ mod tests {
         assert!(img.width > 300 && img.height > 80, "{}x{}", img.width, img.height);
         assert!(img.data.iter().any(|&b| b < 128), "some ink drawn");
     }
+    #[test]
+    fn short_text_gets_minimum_width() {
+        let img = render_signature("T", &RenderOptions::default()).unwrap();
+        assert_eq!(img.width, 400);
+        // Embedding density stays low: fixed payload bits vs channel slots.
+        let bits = crate::PAYLOAD_LEN * 8 * crate::format::REDUNDANCY;
+        assert!((bits as f64) / (img.data.len() as f64) < 0.03, "{}", img.data.len());
+    }
+
     #[test]
     fn empty_name() {
         assert_eq!(render_signature("  ", &RenderOptions::default()).unwrap_err(), Error::EmptyName);

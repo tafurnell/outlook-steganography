@@ -28,11 +28,21 @@ export interface RevealedSecret {
   sentAt: Date;
 }
 
+/**
+ * Neutral attachment name in the style Outlook itself uses for pasted/inline images
+ * (image010.png … image099.png), so the name gives no hint that the add-in made it (D-036).
+ * Detection never relies on the name.
+ */
+function neutralFileName(): string {
+  const n = 10 + (crypto.getRandomValues(new Uint8Array(1))[0] % 90);
+  return `image0${n}.png`;
+}
+
 export function createSignature(keyB64: string, displayName: string, message: string): SignatureImage {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const s = wasm.createSignature(keyB64, displayName, message, Math.floor(Date.now() / 1000), nonce);
   try {
-    return { png: s.png, width: s.width, height: s.height, fileName: s.fileName };
+    return { png: s.png, width: s.width, height: s.height, fileName: neutralFileName() };
   } finally {
     s.free();
   }
