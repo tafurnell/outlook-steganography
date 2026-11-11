@@ -6,7 +6,8 @@
 //   CF_ZONE_ID      (optional) Cloudflare zone ID for itmsolutions.co.uk
 //   ADDIN_BASE_URL  (optional) public URL, default https://itmsolutions.co.uk/outlook-stego/
 //
-// Uses OpenSSH `scp` (built into Windows 10+, macOS and Linux).
+// Uses OpenSSH `scp`/`ssh` (built into Windows 10+, macOS and Linux). Without SSH keys you'll be
+// asked for the Pi password twice (copy + permission fix).
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -24,6 +25,15 @@ if (!target) {
 const entries = readdirSync(dist).map((f) => join(dist, f));
 execFileSync("scp", ["-r", ...entries, target], { stdio: "inherit" });
 console.log(`Uploaded ${entries.length} entries to ${target}`);
+
+// scp from Windows can create sub-folders (e.g. assets/) that nginx (www-data) can't
+// read, giving 403s. Make everything world-readable (dirs traversable).
+const m = /^([^:]+):(.+)$/.exec(target);
+if (m) {
+  const [, host, path] = m;
+  execFileSync("ssh", [host, `chmod -R a+rX '${path.replace(/'/g, "")}'`], { stdio: "inherit" });
+  console.log("Permissions set (a+rX).");
+}
 
 const { CF_API_TOKEN: token, CF_ZONE_ID: zone } = process.env;
 if (token && zone) {
