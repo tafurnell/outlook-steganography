@@ -59,3 +59,32 @@ describe("signatureImgHtml", () => {
     expect(img.className).toBe("ostg-sig");
   });
 });
+
+import { stripSignatureImgTags } from "../src/mail/bodyEdit";
+
+describe("stripSignatureImgTags (DOM-free, for the event handler)", () => {
+  it("removes quoted placeholders by alt text (any recent name), our class, legacy names; keeps others", () => {
+    const html =
+      '<div>Reply here</div><div id="appendonsend"></div>' +
+      '<img data-imagetype="AttachmentByCid" originalsrc="cid:ee2b" src="data:image/gif;base64,R0lG" alt="Regards" width="204">' +
+      "<img class='x_ostg-sig' src='cid:image042.png' alt='Tim'>" +
+      '<IMG SRC="cid:sig_timfurnell.png">' +
+      '<img src="cid:image001.png" alt="Company &amp; Co logo">' +
+      '<img data-alt="Regards" alt="Photo" src="cid:x">';
+    const { html: out, removed } = stripSignatureImgTags(html, ["Tim Furnell", "regards", ""]);
+    expect(removed).toBe(3);
+    expect(out).toContain("Company &amp; Co logo");
+    expect(out).toContain('alt="Photo"');
+    expect(out).toContain("Reply here");
+    expect(out).not.toContain('originalsrc="cid:ee2b"');
+    expect(out).not.toContain("x_ostg-sig");
+    expect(out).not.toContain("sig_timfurnell");
+    expect(out).toContain('data-alt="Regards" alt="Photo"'); // data-alt must not count as alt
+  });
+
+  it("decodes entities in alt text and leaves html untouched when nothing matches", () => {
+    expect(stripSignatureImgTags('<img alt="Tim &amp; Jo">', ["Tim & Jo"]).removed).toBe(1);
+    const html = '<p>Hello</p><img src="cid:a.png" alt="Logo">';
+    expect(stripSignatureImgTags(html, ["Regards"])).toEqual({ html, removed: 0 });
+  });
+});

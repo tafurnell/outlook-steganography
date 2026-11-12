@@ -4,9 +4,11 @@ import {
 import type { MailAdapter } from "../mail/MailAdapter";
 import { OfficeJsAdapter } from "../mail/OfficeJsAdapter";
 
-const KEY_SETTING = "ostg.masterKey";
-const NAME_SETTING = "ostg.displayName";
-const REMOVE_OLD_SETTING = "ostg.removeOldSignatures";
+import {
+  KEY_SETTING, LAST_EVENT_SETTING, NAME_SETTING, RECENT_NAMES_SETTING, REMOVE_OLD_SETTING, parseRecentNames, withRecentName,
+} from "../shared/settings";
+
+
 const REVEAL_MS = 30_000;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -34,6 +36,7 @@ function show(view: "settings" | "compose" | "read"): void {
 const storedKey = () => mail.settings.get(KEY_SETTING);
 const displayName = () => mail.settings.get(NAME_SETTING) || mail.userDisplayName();
 const removeOld = () => mail.settings.get(REMOVE_OLD_SETTING) === "1";
+const recentNames = () => parseRecentNames(mail.settings.get(RECENT_NAMES_SETTING));
 
 function mainView(): void {
   lastItemKey = mail.currentItemKey();
@@ -61,6 +64,12 @@ async function openSettings(): Promise<void> {
   show("settings");
   ($("displayName") as HTMLInputElement).value = displayName();
   ($("removeOld") as HTMLInputElement).checked = removeOld();
+  const lastEvent = mail.settings.get(LAST_EVENT_SETTING);
+  $("eventInfo").textContent = lastEvent
+    ? `Automatic compose event last ran: ${new Date(lastEvent).toLocaleString()}.`
+    : "Automatic compose event: not seen yet (reopen this pane after starting a new email).";
+  const autoRemoved = mail.settings.get("ostg.lastAutoRemoved");
+  if (lastEvent && autoRemoved) $("eventInfo").textContent += ` Last automatic removal: ${autoRemoved} old signature(s).`;
   const key = storedKey();
   $("backFromSettings").hidden = !key;
   $("keyInfo").textContent = key
@@ -122,8 +131,12 @@ async function insertSignature(): Promise<void> {
     setStatus("Creating signature…");
     const sig = createSignature(key, name, secretEl.value);
     const report = await mail.replaceSignature(
-      sig, name, (png) => extractMessage(key, png) !== undefined, [name, displayName()], removeOld(),
+      sig, name, (png) => extractMessage(key, png) !== undefined, [name, displayName(), ...recentNames()], removeOld(),
     );
+    // Remember the text so earlier signatures can be recognised in quoted replies (D-040),
+    // and remove the "Add secure signature" bar.
+    await mail.settings.set(RECENT_NAMES_SETTING, JSON.stringify(withRecentName(recentNames(), name)));
+    await mail.dismissComposeOffer();
     $("composeDiagList").replaceChildren(
       ...report.notes.map((n) => Object.assign(document.createElement("li"), { textContent: n })),
     );

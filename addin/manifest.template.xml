@@ -48,14 +48,14 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.8">
+        <bt:Sets DefaultMinVersion="{{MIN_MAILBOX}}">
           <bt:Set Name="Mailbox"/>
         </bt:Sets>
       </Requirements>
       <Hosts>
-        <Host xsi:type="MailHost">
+        <Host xsi:type="MailHost">{{RUNTIMES}}
           <DesktopFormFactor>
-            <FunctionFile resid="Commands.Url"/>
+            <FunctionFile resid="Commands.Url"/>{{LAUNCH_EVENT}}
 
             <!-- Read: "Check message" – pinnable so it re-checks each selected message (D-007) -->
             <ExtensionPoint xsi:type="MessageReadCommandSurface">
@@ -117,6 +117,8 @@
         <bt:Urls>
           <bt:Url id="Commands.Url" DefaultValue="{{BASE_URL}}commands.html"/>
           <bt:Url id="Taskpane.Url" DefaultValue="{{BASE_URL}}taskpane.html"/>
+          <bt:Url id="WebViewRuntime.Url" DefaultValue="{{BASE_URL}}commands.html"/>
+          <bt:Url id="JSRuntime.Url" DefaultValue="{{BASE_URL}}launchevent.js"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="{{DISPLAY_NAME}}"/>

@@ -1,4 +1,5 @@
-// Function file required by the manifest. Both buttons currently open the task
-// pane; function commands (no UI) can be registered here later.
+// Function file (commands.html). Also the browser runtime for event-based
+// activation in new Outlook / Outlook on the web, so it registers the event handlers.
+import "../launchevent/launchevent";
+
 Office.onReady(() => undefined);
-export {};

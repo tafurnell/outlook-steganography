@@ -21,12 +21,13 @@
       <h2>Settings</h2>
       <p class="hint">Everyone who exchanges hidden codes must use the <strong>same passphrase</strong>. Only a derived key is stored, never the passphrase.</p>
       <p id="keyInfo" class="hint"></p>
+      <p id="eventInfo" class="hint"></p>
       <label for="passphrase">Shared passphrase</label>
       <input id="passphrase" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. five random words" />
       <label for="displayName">Name shown in signature</label>
       <input id="displayName" type="text" autocomplete="name" />
       <label class="inline"><input id="removeOld" type="checkbox" /> Remove previous secure signatures when replying</label>
-      <p class="hint">Off: earlier signatures stay in the quoted text (recipients still see only the latest secret). On: they're removed, but Outlook rewrites the email and moves the cursor to the very end.</p>
+      <p class="hint">Off: earlier signatures stay in the quoted text (recipients still see only the latest secret). On: they're removed automatically as soon as you open a reply or forward – but Outlook then puts the cursor at the very end of the email, so click where you want to type.</p>
       <div class="row">
         <button id="saveSettings" type="button" class="primary">Save</button>
         <button id="backFromSettings" type="button">Back</button>

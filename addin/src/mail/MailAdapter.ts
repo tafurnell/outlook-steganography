@@ -67,6 +67,9 @@ export interface MailAdapter {
   /** Identity of the current item + mode, to detect changes when ItemChanged doesn't fire (no pinning). */
   currentItemKey(): string;
 
+  /** Compose mode: remove the "Add secure signature" bar shown by the compose event. */
+  dismissComposeOffer(): Promise<void>;
+
   /** Non-secret notice on the item (info bar). Never pass the secret itself (D-017). */
   notify(text: string): Promise<void>;
   clearNotification(): Promise<void>;

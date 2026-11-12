@@ -57,6 +57,11 @@ try {
     }
   }
 
+  const ev = await get("launchevent.js");
+  checkCommon("launchevent.js", ev, { type: "javascript", cache: /no-cache|no-store|max-age=0/ });
+  /onNewMessageComposeHandler/.test(ev.body) ? ok("event handler present") : bad("launchevent.js doesn't register onNewMessageComposeHandler");
+  /LaunchEvent/.test(manifest.body) ? ok("manifest enables compose events") : bad("manifest has no LaunchEvent – built with ENABLE_EVENTS=0?");
+
   const icon = await get("assets/icon-32.png", { text: false });
   console.log("\nassets/icon-32.png");
   icon.res.status === 200 ? ok("HTTP 200") : bad(`HTTP ${icon.res.status}`);

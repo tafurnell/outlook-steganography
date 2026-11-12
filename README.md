@@ -72,43 +72,18 @@ Remove the dev add-in before installing the production one (they share the same 
 
 ## Deploy (production)
 
-### One-time setup on the Raspberry Pi
+Full runbook – one-time Pi/nginx and Cloudflare setup, releases, installing in Outlook, troubleshooting, rollback: **[docs/deployment.md](docs/deployment.md)**.
 
-```bash
-# 1. Folder for the add-in, owned by the user you'll deploy as
-sudo mkdir -p /var/www/outlook-stego
-sudo chown "$USER":www-data /var/www/outlook-stego
-sudo chmod 755 /var/www/outlook-stego
-
-# 2. nginx location block (copy deploy/nginx/outlook-stego.conf to the Pi first, e.g. with scp)
-sudo cp outlook-stego.conf /etc/nginx/snippets/outlook-stego.conf
-#    Then add this line inside the WordPress  server { listen 443 ...  }  block,
-#    ABOVE the  location ~ \.php$  block:
-#        include /etc/nginx/snippets/outlook-stego.conf;
-grep -q wasm /etc/nginx/mime.types || echo "add 'application/wasm wasm;' to /etc/nginx/mime.types"
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-If WordPress uses an nginx FastCGI/page cache with its own `location /` rules, the `^~` prefix in the snippet still takes precedence.
-
-### One-time setup in Cloudflare (dashboard → itmsolutions.co.uk)
-
-- **Rules → Configuration Rules → Create**: *URI Path starts with* `/outlook-stego/` → Security Level **Essentially Off**, **Rocket Loader Off**, Browser Integrity Check **Off**.
-- If **Bot Fight Mode** (Security → Bots) is on, it applies zone-wide and can block Outlook's requests – check the verify step below; switch it off if challenges appear.
-- Optional, for automatic cache purge on deploy: **My Profile → API Tokens → Create Token** with *Zone → Cache Purge → Purge* for this zone; note the **Zone ID** (Overview page).
-
-### Each release (from Windows)
+Each release, from `addin`:
 
 ```powershell
-cd addin
-npm run build                                   # production build → addin\dist (ID + URLs for itmsolutions.co.uk)
-$env:DEPLOY_TARGET = "tim@<pi-host>:/var/www/outlook-stego/"
-$env:CF_API_TOKEN = "..."; $env:CF_ZONE_ID = "..."   # optional
-npm run deploy                                  # scp + Cloudflare purge
-npm run verify                                  # checks status codes, MIME types, headers, caching, challenges
+npm run build
+npm test
+npm run deploy     # needs $env:DEPLOY_TARGET (and optionally CF_API_TOKEN / CF_ZONE_ID)
+npm run verify     # must end with "All checks passed"
 ```
 
-Then in Outlook: **Add a custom add-in → Add from file…** with `addin\dist\manifest.xml` (or download https://itmsolutions.co.uk/outlook-stego/manifest.xml with `Invoke-WebRequest` – not a browser "Save as"). The production add-in is called **Secure Signature**; the dev one **Secure Signature (dev)** – they have different IDs, so both can be installed. Settings are stored per add-in, so enter the passphrase once in the production add-in too.
+Reinstall the add-in in Outlook only when the manifest changed.
 
 ## Security notes
 

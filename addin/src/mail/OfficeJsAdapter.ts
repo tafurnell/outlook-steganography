@@ -2,6 +2,7 @@ import type { SignatureImage } from "../core/stego";
 import { isSignatureFileName } from "../core/stego";
 import { extractPngParts } from "./mime";
 import { findQuoteStart, selectOldSignatureImgs, signatureImgHtml } from "./bodyEdit";
+import { OFFER_NOTIFICATION_KEY } from "../shared/settings";
 import type {
   AttachmentNote, CandidateImage, ItemMode, MailAdapter, RemovalReport, ScanResult, SettingsStore,
 } from "./MailAdapter";
@@ -242,9 +243,12 @@ export class OfficeJsAdapter implements MailAdapter {
     const oldImgs = selectOldSignatureImgs(allImgs, altNames, removedRefs);
     oldImgs.forEach((img) => img.remove());
 
-    // 5. Nothing to remove → no rewrite needed; Outlook places the signature and the
-    //    cursor is left alone.
-    if (oldImgs.length === 0) {
+    // 5. Nothing to remove and not a reply/forward → no rewrite; Outlook places the
+    //    signature and the cursor is left alone. On a reply/forward we still place it
+    //    ourselves: the compose event may already have rewritten the body (D-040), after
+    //    which Outlook's own placement lands at the very end.
+    const anchor = findQuoteStart(doc);
+    if (oldImgs.length === 0 && !anchor) {
       await this.placeAsSignature(imgHtml, notes);
       return { attachmentsRemoved: removedRefs.length / 2, imgTagsRemoved: 0, notes };
     }
@@ -253,7 +257,6 @@ export class OfficeJsAdapter implements MailAdapter {
     //    message (Outlook's markers) – a rewrite loses Outlook's signature position,
     //    so setSignatureAsync would otherwise append at the very end. Outlook then
     //    puts the cursor at the end of the body.
-    const anchor = findQuoteStart(doc);
     if (anchor) {
       const wrapper = doc.createElement("div");
       wrapper.innerHTML = `<br>${imgHtml}<br>`;
@@ -286,6 +289,14 @@ export class OfficeJsAdapter implements MailAdapter {
         cb,
       ),
     );
+  }
+
+  async dismissComposeOffer(): Promise<void> {
+    try {
+      await call<void>((cb) => Office.context.mailbox.item!.notificationMessages.removeAsync(OFFER_NOTIFICATION_KEY, cb));
+    } catch {
+      /* bar not shown (events off, or already dismissed) */
+    }
   }
 
   async clearNotification(): Promise<void> {

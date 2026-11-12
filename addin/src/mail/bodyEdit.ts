@@ -52,3 +52,37 @@ export function selectOldSignatureImgs(imgs: Element[], altNames: string[], remo
     );
   });
 }
+
+const ENTITIES: Record<string, string> = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " " };
+const decodeEntities = (v: string) =>
+  v.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
+    e[0] === "#"
+      ? String.fromCodePoint(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10))
+      : (ENTITIES[e.toLowerCase()] ?? m),
+  );
+
+function attr(tag: string, name: string): string {
+  // Requires whitespace before the name, so e.g. data-alt doesn't match alt.
+  const m = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+  return m ? decodeEntities(m[1] ?? m[2] ?? m[3] ?? "") : "";
+}
+
+/**
+ * DOM-free version of selectOldSignatureImgs for the event handler (classic Outlook runs it
+ * without a DOM): removes <img> tags that are earlier secure signatures – our class (possibly
+ * x_-prefixed), our alt text (any recently used signature text), or legacy sig_*.png names.
+ */
+export function stripSignatureImgTags(html: string, names: string[]): { html: string; removed: number } {
+  const alts = names.map((a) => a.trim().toLowerCase()).filter((a) => a.length > 2);
+  let removed = 0;
+  const out = html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const alt = attr(tag, "alt").trim().toLowerCase();
+    const hit =
+      SIG_CLASS_RE.test(attr(tag, "class")) ||
+      (alt !== "" && alts.includes(alt)) ||
+      /sig_[^"'/]*\.png/i.test(attr(tag, "src"));
+    if (hit) removed++;
+    return hit ? "" : tag;
+  });
+  return { html: out, removed };
+}

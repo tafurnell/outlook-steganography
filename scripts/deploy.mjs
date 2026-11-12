@@ -38,7 +38,7 @@ if (m) {
 const { CF_API_TOKEN: token, CF_ZONE_ID: zone } = process.env;
 if (token && zone) {
   // Hashed files never need purging; purge the stable-named ones.
-  const stable = ["taskpane.html", "commands.html", "manifest.xml", "taskpane.css",
+  const stable = ["taskpane.html", "commands.html", "manifest.xml", "taskpane.css", "launchevent.js",
     ...[16, 32, 64, 80, 128].map((s) => `assets/icon-${s}.png`)];
   const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`, {
     method: "POST",
