@@ -21,3 +21,7 @@ button:disabled { opacity: .5; cursor: default; }
 .secret { display: block; padding: 8px; background: #f5f6f8; border-radius: 4px; word-break: break-all; font-size: 15px; }
 .secret.masked { letter-spacing: 2px; color: var(--muted); }
 .card.older { border-left-color: var(--line); opacity: .85; }
+.sender { border-radius: 4px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+.sender.verified { background: #e7f5ec; color: #1d5b33; }
+.sender.warning, .sender.unknown { background: #fff6e0; color: #6b4e00; }
+.sender.failed { background: #fde8e7; color: #8c1d18; font-weight: 600; }

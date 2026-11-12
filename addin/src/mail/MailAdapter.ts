@@ -27,6 +27,8 @@ export interface ScanResult {
    *  tell when the pane is still bound to an older message (no pinning on Outlook.com). */
   subject: string;
   from: string;
+  /** Sender's email address (for the sender check, D-044). */
+  fromAddress: string;
   received?: Date;
   images: CandidateImage[];
   notes: AttachmentNote[];
@@ -51,6 +53,9 @@ export interface MailAdapter {
 
   /** Read mode: PNG attachments (inline and regular), hinted ones first (D-018 rule 4). */
   listCandidateImages(): Promise<ScanResult>;
+
+  /** Read mode: the received message's raw internet headers, or undefined if unavailable. */
+  getInternetHeaders(): Promise<string | undefined>;
 
   /**
    * Compose mode: remove previous signature images from this draft (D-010, best effort), e.g. quoted

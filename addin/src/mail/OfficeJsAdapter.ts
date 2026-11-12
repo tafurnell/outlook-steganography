@@ -99,7 +99,7 @@ export class OfficeJsAdapter implements MailAdapter {
 
   async listCandidateImages(): Promise<ScanResult> {
     const item = this.read;
-    if (!item) return { subject: "(no message selected)", from: "", images: [], notes: [] };
+    if (!item) return { subject: "(no message selected)", from: "", fromAddress: "", images: [], notes: [] };
     const images: CandidateImage[] = [];
     const notes: AttachmentNote[] = [];
     for (const a of item.attachments ?? []) {
@@ -160,7 +160,7 @@ export class OfficeJsAdapter implements MailAdapter {
     images.sort((x, y) => Number(y.hinted) - Number(x.hinted));
     const from = item.from?.displayName || item.from?.emailAddress || "";
     const received = item.dateTimeCreated instanceof Date ? item.dateTimeCreated : undefined;
-    return { subject: item.subject ?? "", from, received, images, notes };
+    return { subject: item.subject ?? "", from, fromAddress: item.from?.emailAddress ?? "", received, images, notes };
   }
 
   currentItemKey(): string {
@@ -169,6 +169,17 @@ export class OfficeJsAdapter implements MailAdapter {
     const id = typeof item["itemId"] === "string" ? (item["itemId"] as string) : "";
     const subject = typeof item["subject"] === "string" ? (item["subject"] as string) : "";
     return `${this.mode}|${id}|${subject}`;
+  }
+
+  async getInternetHeaders(): Promise<string | undefined> {
+    const item = this.read;
+    if (!item || typeof item.getAllInternetHeadersAsync !== "function") return undefined;
+    try {
+      return await callWithRetry<string>((cb) => item.getAllInternetHeadersAsync(cb));
+    } catch (e) {
+      console.warn("Could not read internet headers", e);
+      return undefined;
+    }
   }
 
   async replaceSignature(

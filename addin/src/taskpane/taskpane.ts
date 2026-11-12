@@ -2,6 +2,7 @@ import {
   createSignature, deriveMasterKeyAsync, extractMessage, keyFingerprint, loadCore, maxMessageBytes, utf8Length,
 } from "../core/stego";
 import type { MailAdapter } from "../mail/MailAdapter";
+import { evaluateSenderAuthentication, type AuthVerdict } from "../mail/authResults";
 import { OfficeJsAdapter } from "../mail/OfficeJsAdapter";
 
 import {
@@ -164,6 +165,8 @@ function clearResults(): void {
   $("results").replaceChildren(); // drops revealed secrets from the DOM
   $("diagList").replaceChildren();
   $("checkedSubject").textContent = "";
+  $("senderCheck").hidden = true;
+  $("senderCheck").textContent = "";
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -224,7 +227,7 @@ async function scan(): Promise<void> {
   if (!key) return;
   setStatus("Checking for hidden messages…");
   try {
-    const { subject, from, received, images, notes } = await mail.listCandidateImages();
+    const { subject, from, fromAddress, received, images, notes } = await mail.listCandidateImages();
     if (gen !== scanGeneration) return; // user moved to another message
     const sentBy = from ? ` from ${from}` : "";
     const when = received ? `, received ${fmtTime(received)}` : "";
@@ -242,6 +245,10 @@ async function scan(): Promise<void> {
     if (gen !== scanGeneration) return;
     renderDiagnostics(notes, images, decoded);
     if (found.length) {
+      // Sender check (D-044): only worth fetching headers when there's a secret to vouch for.
+      const verdict = evaluateSenderAuthentication(await mail.getInternetHeaders(), fromAddress);
+      if (gen !== scanGeneration) return;
+      showSenderCheck(verdict);
       // Latest shown; earlier ones (quoted replies) collapsed.
       addSecretCard(found[0].message, found[0].sentAt, found.length === 1 ? undefined : true);
       if (found.length > 1) {
@@ -277,6 +284,18 @@ async function scan(): Promise<void> {
   } catch (e) {
     if (gen === scanGeneration) setStatus(`Check failed: ${(e as Error).message ?? e}`, true);
   }
+}
+
+const SENDER_ICON: Record<AuthVerdict["level"], string> = { verified: "✔", warning: "⚠", failed: "✘", unknown: "?" };
+
+function showSenderCheck(v: AuthVerdict): void {
+  const el = $("senderCheck");
+  el.className = `sender ${v.level}`;
+  el.textContent = `${SENDER_ICON[v.level]} ${v.summary}`;
+  el.hidden = false;
+  const li = document.createElement("li");
+  li.textContent = `Sender check: SPF ${v.spf ?? "–"}, DKIM ${v.dkim ?? "–"}, DMARC ${v.dmarc ?? "–"}, compauth ${v.compauth ?? "–"}${v.authenticatedDomain ? `, domain ${v.authenticatedDomain}` : ""}`;
+  $("diagList").appendChild(li);
 }
 
 function renderDiagnostics(
